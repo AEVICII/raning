@@ -30,8 +30,8 @@ if screen -list | grep -q "$SESSION"; then
         1) screen -r $SESSION ;;
         2) screen -S $SESSION -X quit
            sleep 1
-           pip install -r requirements.txt --quiet
-           screen -dmS $SESSION python app.py
+           pip3 install -r requirements.txt --quiet
+           screen -dmS $SESSION python3 app.py
            echo "✅ Servidor reiniciado en segundo plano"
            echo "   Abre: http://localhost:5000" ;;
         3) screen -S $SESSION -X quit
@@ -44,8 +44,8 @@ else
     echo "  🚀 Deriv Trader - Iniciando en segundo plano"
     echo "================================================"
     echo ""
-    pip install -r requirements.txt --quiet
-    screen -dmS $SESSION python app.py
+    pip3 install -r requirements.txt --quiet
+    screen -dmS $SESSION python3 app.py
     sleep 1
     if screen -list | grep -q "$SESSION"; then
         echo "  ✅ Servidor iniciado correctamente"
@@ -60,6 +60,6 @@ else
         echo ""
     else
         echo "  ❌ Error al iniciar. Iniciando en modo visible..."
-        python app.py
+        python3 app.py
     fi
 fi
