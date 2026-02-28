@@ -1,0 +1,40 @@
+{
+  "api_token": null,
+  "symbol": "R_10",
+  "decimals": 3,
+  "contracts": [],
+  "global_stats": {
+    "totalTrades": 0,
+    "totalWins": 0,
+    "totalLosses": 0,
+    "totalBalance": 0.0,
+    "globalMaxWin": 0.0,
+    "globalMaxLoss": 0.0,
+    "globalTotalProfit": 0.0
+  },
+  "sl_tp": {
+    "stopLossEnabled": false,
+    "stopLossAmount": 0,
+    "takeProfitEnabled": false,
+    "takeProfitAmount": 0
+  },
+  "digit_limit": {
+    "enabled": false,
+    "limit": 0,
+    "currentCount": 0,
+    "lastCountedEpoch": null
+  },
+  "telegram": {
+    "enabled": false,
+    "botToken": null,
+    "chatId": null,
+    "notify": {
+      "globalBalance": true,
+      "tradeResult": true,
+      "patternDetected": false,
+      "botStartStop": true,
+      "stopLossTakeProfit": true,
+      "botBalance": {}
+    }
+  }
+}

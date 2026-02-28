@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deriv Trader - Trading de Índices Sintéticos</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <h1>📊 Deriv Trader</h1>
+                <p class="subtitle">Trading de Índices Sintéticos en Tiempo Real</p>
+            </div>
+            <div class="connection-status">
+                <span class="status-indicator" id="connectionStatus">🔴 Desconectado</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Left Panel - Configuración -->
+            <aside class="sidebar">
+                <div class="panel">
+                    <h2>⚙️ Configuración</h2>
+                    
+                    <!-- API Token -->
+                    <div class="form-group">
+                        <label for="apiToken">
+                            🔑 API Token
+                            <span class="tooltip" title="Token de API con permisos de trading. Se guarda automáticamente en tu dispositivo.">ℹ️</span>
+                            <span id="apiTokenSavedBadge" style="font-size:11px; color:#4caf50; margin-left:8px; display:none;">✅ Guardado</span>
+                        </label>
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            <input type="password" id="apiToken" placeholder="Tu API Token de Deriv" class="input-styled" style="flex:1;">
+                            <button id="clearTokenBtn" title="Borrar token guardado" style="padding:8px 10px; background:#c0392b; border:none; border-radius:5px; color:#fff; cursor:pointer; font-size:13px;">🗑️</button>
+                        </div>
+                        <small>Obtén tu token en <a href="https://app.deriv.com/account/api-token" target="_blank">app.deriv.com</a> • Se guarda automáticamente</small>
+                    </div>
+
+                    <!-- Selección de Índice -->
+                    <div class="form-group">
+                        <label for="symbolSelect">📈 Índice Sintético</label>
+                        <select id="symbolSelect" class="select-styled">
+                            {% for symbol, name in indices.items() %}
+                            <option value="{{ symbol }}">{{ name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Selección de Decimales -->
+                    <div class="form-group">
+                        <label for="decimalsSelect">
+                            🔢 Decimales del Índice
+                            <span class="tooltip" title="Número de decimales que usa el precio. Ejemplo: 5449.250 = 3 decimales. Cambia esto si los dígitos no se detectan correctamente.">ℹ️</span>
+                        </label>
+                        <select id="decimalsSelect" class="select-styled">
+                            <option value="1">1 decimal</option>
+                            <option value="2">2 decimales</option>
+                            <option value="3" selected>3 decimales (R_100, R_50, etc.)</option>
+                            <option value="4">4 decimales (JD10, RDBEAR, etc.)</option>
+                            <option value="5">5 decimales</option>
+                        </select>
+                        <small style="color: #888; font-size: 11px;">⚠️ Verifica en los ticks qué decimales usa tu índice</small>
+                    </div>
+
+                    <!-- Botón para aplicar nuevo símbolo/decimales -->
+                    <button id="applySymbolBtn" class="btn btn-success btn-block" style="margin-bottom:8px;">
+                        🔄 Aplicar Índice y Decimales
+                    </button>
+                    <div id="applySymbolStatus" style="font-size:11px;color:#888;text-align:center;margin-bottom:8px;min-height:16px;"></div>
+
+                    <button id="saveConfigBtn" class="btn btn-primary btn-block">
+                        💾 Guardar API Token
+                    </button>
+                    <small style="color:#888;font-size:11px;display:block;margin-top:6px;text-align:center;">
+                        💡 Los bots corren en el servidor — siguen activos aunque cierres el navegador
+                    </small>
+                </div>
+
+                <!-- Estadísticas de Dígitos - debajo de configuración -->
+                <div class="panel">
+                    <div class="stats-section-header" style="margin-bottom:10px;">
+                        <span class="stats-section-icon">📊</span>
+                        <span class="stats-section-title">Estadísticas de Dígitos</span>
+                    </div>
+                    <div id="digitStats" class="digit-stats">
+                        <div class="loading">Esperando datos...</div>
+                    </div>
+                </div>
+
+            </aside>
+
+            <!-- Center Panel - Visualización de Ticks -->
+            <main class="main-panel">
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>📡 Ticks en Tiempo Real</h2>
+                        <div class="view-toggle">
+                            <button id="viewTicksBtn" class="toggle-btn active" data-view="ticks">
+                                Ver Ticks Completos
+                            </button>
+                            <button id="viewDigitsBtn" class="toggle-btn" data-view="digits">
+                                Ver Último Dígito
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="currentSymbol" class="current-symbol">
+                        Selecciona un índice y conecta
+                    </div>
+
+                    <!-- Tabla de Ticks -->
+                    <div id="ticksContainer" class="ticks-container">
+                        <table class="ticks-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Tick</th>
+                                    <th>Último Dígito</th>
+                                    <th>Hora</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ticksTableBody">
+                                <tr>
+                                    <td colspan="4" class="no-data">
+                                        📊 Esperando conexión...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Vista de Dígitos -->
+                    <div id="digitsContainer" class="digits-container" style="display: none;">
+                        <div class="digits-grid" id="digitsGrid">
+                            <!-- Se llenará dinámicamente con JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Right Panel - Panel de Trading -->
+            <aside class="trading-panel">
+                <div class="panel">
+                    <h2>💰 Panel de Trading</h2>
+
+                    <!-- Tipo de Contrato -->
+                    <div class="form-group">
+                        <label for="contractType">📋 Tipo de Contrato</label>
+                        <select id="contractType" class="select-styled">
+                            <option value="">Seleccionar...</option>
+                            <option value="DIGITDIFF">Differs</option>
+                            <option value="DIGITMATCH">Matches</option>
+                            <option value="DIGITEVEN">Even (Par)</option>
+                            <option value="DIGITODD">Odd (Impar)</option>
+                            <option value="DIGITOVER">Over (Mayor que)</option>
+                            <option value="DIGITUNDER">Under (Menor que)</option>
+                        </select>
+                    </div>
+
+                    <!-- Número de Predicción -->
+                    <div class="form-group" id="predictionGroup" style="display: none;">
+                        <label for="prediction">🎯 Predicción (0-9)</label>
+                        <select id="prediction" class="select-styled">
+                            <option value="0">0</option>
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4">4</option>
+                            <option value="5">5</option>
+                            <option value="6">6</option>
+                            <option value="7">7</option>
+                            <option value="8">8</option>
+                            <option value="9">9</option>
+                        </select>
+                    </div>
+
+                    <!-- Número de Ticks -->
+                    <div class="form-group" id="durationGroup" style="display: none;">
+                        <label for="duration">⏱️ Número de Ticks</label>
+                        <input type="number" id="duration" class="input-styled" 
+                               min="1" max="10" value="5" placeholder="1-10">
+                    </div>
+
+                    <!-- Cantidad a Invertir -->
+                    <div class="form-group" id="stakeGroup" style="display: none;">
+                        <label for="stake">💵 Cantidad a Invertir (USD)</label>
+                        <input type="number" id="stake" class="input-styled" 
+                               min="0.35" step="0.01" value="1.00" placeholder="Mínimo 0.35">
+                    </div>
+
+                    <!-- Información del Contrato -->
+                    <div id="proposalInfo" class="proposal-info" style="display: none;">
+                        <h3>📄 Información del Contrato</h3>
+                        <div class="info-row">
+                            <span>Pago Potencial:</span>
+                            <span id="potentialPayout" class="value">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span>Ganancia:</span>
+                            <span id="potentialProfit" class="value success">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span>ROI:</span>
+                            <span id="returnPercentage" class="value">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Botones de Acción -->
+                    <div class="action-buttons">
+                        <button id="getProposalBtn" class="btn btn-secondary btn-block" disabled>
+                            📊 Obtener Cotización
+                        </button>
+                        <button id="buyContractBtn" class="btn btn-success btn-block" disabled>
+                            ✅ Comprar Contrato
+                        </button>
+                    </div>
+
+                    <!-- Historial de Operaciones -->
+                    <div class="trades-history">
+                        <h3>📜 Últimas Operaciones</h3>
+                        <div id="tradesHistoryList" class="trades-list">
+                            <p class="no-data">No hay operaciones aún</p>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </div>
+
+        <!-- Fila inferior: Par/Impar + Mean Reversion -->
+        <div class="bottom-stats-row">
+            <div class="panel">
+                <div class="stats-section-header" style="margin-bottom:10px;">
+                    <span class="stats-section-icon">⚖️</span>
+                    <span class="stats-section-title">Par / Impar</span>
+                </div>
+                <div id="evenOddStats" class="even-odd-stats">
+                    <div class="loading">Esperando datos...</div>
+                </div>
+            </div>
+            <div class="panel">
+                <div class="stats-section-header" style="margin-bottom:10px;">
+                    <span class="stats-section-icon">📡</span>
+                    <span class="stats-section-title">Mean Reversion</span>
+                </div>
+                <div id="meanReversionPanel">
+                    <div class="mr-waiting">⏳ Esperando ticks...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sección de Trading Automatizado Multi-Contrato -->
+        <div class="automation-section">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>🤖 Trading Automatizado Multi-Contrato</h2>
+                    <div class="bot-status">
+                        <span id="globalBotStatus" class="bot-status-badge inactive">⏸️ Todos Detenidos</span>
+                    </div>
+                </div>
+
+                <div class="automation-content">
+                    <!-- Controles Globales -->
+                    <div class="global-controls">
+                        <div class="global-stats">
+                            <div class="global-stat">
+                                <span class="stat-label">Contratos Activos:</span>
+                                <span class="stat-value" id="activeContracts">0</span>
+                            </div>
+                            <div class="global-stat">
+                                <span class="stat-label">Total Operaciones:</span>
+                                <span class="stat-value" id="totalBotTrades">0</span>
+                            </div>
+                            <div class="global-stat success">
+                                <span class="stat-label">Balance Global:</span>
+                                <span class="stat-value" id="globalBotBalance">$0.00</span>
+                            </div>
+                        </div>
+
+                        <!-- Stats extendidas globales -->
+                        <div class="global-stats" style="margin-top:8px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.06);">
+                            <div class="global-stat">
+                                <span class="stat-label">📈 Máx. Ganancia Global:</span>
+                                <span class="stat-value success" id="globalMaxWin">$0.00</span>
+                            </div>
+                            <div class="global-stat">
+                                <span class="stat-label">📉 Máx. Pérdida Global:</span>
+                                <span class="stat-value danger" id="globalMaxLoss">$0.00</span>
+                            </div>
+                            <div class="global-stat">
+                                <span class="stat-label">📊 Promedio/Op. Global:</span>
+                                <span class="stat-value" id="globalAvgProfit">$0.00</span>
+                            </div>
+                        </div>
+
+                        <!-- Stop-Loss / Take-Profit Global -->
+                        <div style="margin: 15px 0; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);">
+                            <div style="font-weight:600; color:#fff; margin-bottom:12px;">🛡️ Protección Global (detiene todos los bots)</div>
+                            <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:center;">
+                                <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                                    <input type="checkbox" id="enableStopLoss" style="cursor:pointer;">
+                                    <span style="color:#f44336; font-weight:600;">🔴 Stop-Loss $</span>
+                                </label>
+                                <input type="number" id="stopLossAmount" placeholder="Ej: 5.00" min="0.01" step="0.01"
+                                    style="width:110px; padding:7px 10px; border-radius:5px; border:1px solid #f44336; background:#2a2a2a; color:#fff;">
+                                <span style="color:#888; font-size:12px;">Detiene si la pérdida acumulada supera este monto</span>
+                            </div>
+                            <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin-top:10px;">
+                                <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                                    <input type="checkbox" id="enableTakeProfit" style="cursor:pointer;">
+                                    <span style="color:#4caf50; font-weight:600;">🟢 Take-Profit $</span>
+                                </label>
+                                <input type="number" id="takeProfitAmount" placeholder="Ej: 10.00" min="0.01" step="0.01"
+                                    style="width:110px; padding:7px 10px; border-radius:5px; border:1px solid #4caf50; background:#2a2a2a; color:#fff;">
+                                <span style="color:#888; font-size:12px;">Detiene si la ganancia acumulada supera este monto</span>
+                            </div>
+                            <div id="slTpStatus" style="margin-top:10px; font-size:13px; color:#888;">⏸️ Protección desactivada</div>
+                        </div>
+                        
+                        <!-- Control de Límite de Dígitos -->
+                        <div class="digit-limit-control" style="margin: 15px 0; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                                <label for="digitLimitInput" style="font-weight: 600; color: #fff;">
+                                    🎯 Límite de Dígitos:
+                                    <span style="font-size: 12px; color: #888; display: block;">Los bots se detendrán automáticamente</span>
+                                </label>
+                                <input 
+                                    type="number" 
+                                    id="digitLimitInput" 
+                                    placeholder="Ej: 100" 
+                                    min="1"
+                                    max="10000"
+                                    style="width: 120px; padding: 8px; border-radius: 5px; border: 1px solid #444; background: #2a2a2a; color: #fff;"
+                                >
+                                <div style="display: flex; gap: 5px; align-items: center;">
+                                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                                        <input type="checkbox" id="enableDigitLimit" style="cursor: pointer;">
+                                        <span style="font-size: 14px;">Activar límite</span>
+                                    </label>
+                                </div>
+                                <div id="digitLimitStatus" style="font-size: 13px; color: #888; margin-left: auto;">
+                                    ⏸️ Límite desactivado
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="global-buttons">
+                            <button id="startAllBotsBtn" class="btn btn-success" disabled>
+                                ▶️ Activar Todos
+                            </button>
+                            <button id="stopAllBotsBtn" class="btn btn-danger" disabled>
+                                ⏹️ Detener Todos
+                            </button>
+                            <button id="resetStatsBtn" class="btn btn-warning" style="background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);">
+                                🔄 Resetear Estadísticas
+                            </button>
+                            <button id="addNewContractBtn" class="btn btn-primary">
+                                ➕ Nuevo Contrato Automatizado
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Lista de Contratos Automatizados -->
+                    <div class="contracts-list" id="contractsList">
+                        <div class="no-contracts">
+                            <div class="empty-state">
+                                <div style="font-size: 64px; margin-bottom: 20px;">🤖</div>
+                                <h3>No hay contratos automatizados</h3>
+                                <p>Crea tu primer contrato automatizado con patrón personalizado</p>
+                                <button class="btn btn-primary" id="createFirstContractBtn">
+                                    ➕ Crear Primer Contrato
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Log Global -->
+                    <div class="bot-log">
+                        <div class="bot-log-header">
+                            <h3>📝 Log de Actividad</h3>
+                            <button onclick="document.getElementById('globalBotLog').value=''" 
+                                    style="padding:4px 10px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); border-radius:5px; color:#aaa; cursor:pointer; font-size:12px;">
+                                🗑️ Limpiar
+                            </button>
+                        </div>
+                        <textarea id="globalBotLog" class="log-textarea" readonly
+                            placeholder="🤖 Sistema listo. Crea contratos automatizados para empezar."></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal para Crear/Editar Contrato Automatizado -->
+        <div id="contractModal" class="modal">
+            <div class="modal-content modal-large">
+                <span class="close" id="closeContractModal">&times;</span>
+                <h2 id="contractModalTitle">➕ Nuevo Contrato Automatizado</h2>
+                
+                <div class="modal-body">
+                    <div class="contract-form">
+                        <!-- Nombre del Contrato -->
+                        <div class="form-group">
+                            <label for="contractName">📝 Nombre del Contrato</label>
+                            <input type="text" id="contractName" class="input-styled" 
+                                   placeholder="Ej: Patrón 5-*-*-5" maxlength="50">
+                        </div>
+
+                        <!-- Configuración de Trading -->
+                        <div class="form-section">
+                            <h3>⚙️ Configuración de Trading</h3>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="modalSymbol">📈 Índice</label>
+                                    <select id="modalSymbol" class="select-styled">
+                                        {% for symbol, name in indices.items() %}
+                                        <option value="{{ symbol }}">{{ name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="modalContractType">📋 Tipo de Contrato</label>
+                                    <select id="modalContractType" class="select-styled">
+                                        <option value="DIGITDIFF">Differs</option>
+                                        <option value="DIGITMATCH">Matches</option>
+                                        <option value="DIGITEVEN">Even (Par)</option>
+                                        <option value="DIGITODD">Odd (Impar)</option>
+                                        <option value="HOTEO">🔥 Par/Impar caliente (auto)</option>
+                                        <option value="COLDEO">🧊 Par/Impar frío (auto)</option>
+                                        <option value="MEANREV">⚖️ Mean Reversion (al que le falta 1)</option>
+                                        <option value="DIGITOVER">Over (Mayor que)</option>
+                                        <option value="DIGITUNDER">Under (Menor que)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group" id="modalPredictionGroup">
+                                    <label for="predictionMode">🎯 Modo de Predicción</label>
+                                    <select id="predictionMode" class="select-styled" onchange="handlePredictionModeChange()">
+                                        <option value="specific">🔢 Número específico</option>
+                                        <option value="hotdigit">🔥 Dígito caliente (el que más sale)</option>
+                                        <option value="colddigit">🧊 Dígito frío (el que menos sale)</option>
+                                        <option value="lastpattern">🎯 Último dígito del patrón detectado</option>
+                                    </select>
+                                    <div id="specificPredictionGroup" style="margin-top:8px;">
+                                        <select id="modalPrediction" class="select-styled">
+                                            <option value="0">0</option>
+                                            <option value="1">1</option>
+                                            <option value="2">2</option>
+                                            <option value="3">3</option>
+                                            <option value="4">4</option>
+                                            <option value="5">5</option>
+                                            <option value="6">6</option>
+                                            <option value="7">7</option>
+                                            <option value="8">8</option>
+                                            <option value="9">9</option>
+                                        </select>
+                                    </div>
+                                    <small id="predictionModeHint" style="color:#f39c12; display:none; margin-top:4px;">
+                                        ⚡ Se calcula automáticamente en cada trade según las estadísticas en vivo
+                                    </small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="modalDuration">⏱️ Ticks</label>
+                                    <input type="number" id="modalDuration" class="input-styled" 
+                                           min="1" max="10" value="5">
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="modalStake">💵 Inversión (USD)</label>
+                                    <input type="number" id="modalStake" class="input-styled" 
+                                           min="0.35" step="0.01" value="1.00">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Martingala -->
+                        <div class="form-section martingale-section">
+                            <div class="martingale-toggle-row">
+                                <label class="tg-toggle" style="margin-right:10px;">
+                                    <input type="checkbox" id="martingaleEnabled" onchange="toggleMartingaleUI(this.checked)">
+                                    <span class="tg-toggle-slider"></span>
+                                </label>
+                                <span style="font-weight:600; font-size:14px;">📈 Martingala</span>
+                                <small style="color:#888; margin-left:8px; font-size:12px;">Recuperar pérdidas automáticamente</small>
+                            </div>
+
+                            <div id="martingaleConfig" style="display:none; margin-top:14px;">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="martingalePayout">💹 Payout (%)</label>
+                                        <input type="number" id="martingalePayout" class="input-styled"
+                                               min="0.01" max="0.99" step="0.01" value="0.95"
+                                               title="Decimal de ganancia (ej: 0.95 = ganas 95% del stake)">
+                                        <small>Decimal: 0.95 = ganas 95% del stake</small>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="martingaleProfit">🎯 Ganancia deseada ($)</label>
+                                        <input type="number" id="martingaleProfit" class="input-styled"
+                                               min="0" step="0.01" value="0"
+                                               title="Cuánto quieres ganar encima de recuperar la pérdida">
+                                        <small>Extra sobre recuperar (0 = solo recuperar)</small>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="martingaleDepth">🔢 Máx. martingalas a ejecutar</label>
+                                    <select id="martingaleDepth" class="select-styled">
+                                        <option value="1">1 pérdida</option>
+                                        <option value="2">2 pérdidas</option>
+                                        <option value="3">3 pérdidas</option>
+                                        <option value="4">4 pérdidas</option>
+                                        <option value="5" selected>5 pérdidas</option>
+                                        <option value="6">6 pérdidas</option>
+                                        <option value="7">7 pérdidas</option>
+                                        <option value="8">8 pérdidas</option>
+                                        <option value="9">9 pérdidas</option>
+                                        <option value="10">10 pérdidas</option>
+                                    </select>
+                                    <small>Ej: 1 = 1 martingala; 2 = 2 martingalas encadenadas antes de reiniciar</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bot Dependiente -->
+                        <div class="form-section dependent-bot-section">
+                            <div class="dependent-toggle-row">
+                                <label class="dependent-toggle-label">
+                                    <input type="checkbox" id="isDependentBot">
+                                    <span class="dependent-toggle-text">🔗 Este bot depende de otro bot</span>
+                                </label>
+                                <small style="color:#888; display:block; margin-top:4px;">
+                                    Se activará automáticamente cuando el bot padre gane o pierda
+                                </small>
+                            </div>
+
+                            <div id="dependentBotConfig" style="display:none; margin-top:12px;">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="dependsOnBot">🤖 Depende del bot:</label>
+                                        <select id="dependsOnBot" class="select-styled">
+                                            <!-- Se llena dinámicamente -->
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="triggerOnResult">⚡ Activar cuando el padre:</label>
+                                        <select id="triggerOnResult" class="select-styled">
+                                            <option value="win">✅ Gane</option>
+                                            <option value="loss">❌ Pierda</option>
+                                            <option value="both">🔄 Gane o Pierda</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="dependent-info-box">
+                                    ⚡ <strong>Ejecución inmediata:</strong> Este bot tiene su propio WebSocket 
+                                    listo. Cuando el padre resuelva, la orden se envía en milisegundos.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Constructor de Patrón -->
+                        <div class="form-section" id="patternBuilderSection">
+                            <h3>🎯 Patrón de Detección</h3>
+                            <p class="pattern-description">
+                                Construye el patrón de dígitos que activará automáticamente este contrato
+                            </p>
+
+                            <!-- Filtro de repetición consecutiva -->
+                            <div class="form-group" style="margin-bottom:14px;">
+                                <label for="maxConsecutiveRepeat">🚫 Ignorar si el mismo dígito se repite consecutivamente:</label>
+                                <select id="maxConsecutiveRepeat" class="select-styled">
+                                    <option value="0">Sin filtro (acepta cualquier secuencia)</option>
+                                    <option value="1">Máx. 1 igual seguido (ninguno repetido)</option>
+                                    <option value="2">Máx. 2 iguales seguidos</option>
+                                    <option value="3">Máx. 3 iguales seguidos</option>
+                                    <option value="4">Máx. 4 iguales seguidos</option>
+                                    <option value="5">Máx. 5 iguales seguidos</option>
+                                </select>
+                                <small style="color:#888; margin-top:4px; display:block;">
+                                    Ej. con máx. 3: si detecta 2,2,2,2,4,6 → lo ignora porque hay 4 doses seguidos
+                                </small>
+                            </div>
+
+                            <div class="pattern-display" id="modalPatternDisplay">
+                                <div class="pattern-empty">
+                                    <p>🎨 Agrega variables para crear tu patrón</p>
+                                    <p class="hint">Ejemplo: [5] → [*] → [*] → [5]</p>
+                                </div>
+                            </div>
+
+                            <button id="modalAddVariableBtn" class="btn btn-secondary btn-block">
+                                ➕ Agregar Variable
+                            </button>
+
+                            <!-- Selector de Variable -->
+                            <div id="modalVariableSelector" class="variable-selector" style="display: none;">
+                                <h4>Selecciona el tipo de variable:</h4>
+                                <div class="variable-options">
+                                    <button class="variable-option" data-type="specific">
+                                        <div class="option-icon">🎯</div>
+                                        <div class="option-name">Número Único</div>
+                                        <div class="option-desc">Dígito específico (0-9)</div>
+                                    </button>
+                                    <button class="variable-option" data-type="any">
+                                        <div class="option-icon">⭐</div>
+                                        <div class="option-name">Cualquier Número</div>
+                                        <div class="option-desc">Acepta cualquier dígito</div>
+                                    </button>
+                                    <button class="variable-option" data-type="even">
+                                        <div class="option-icon">📗</div>
+                                        <div class="option-name">Par</div>
+                                        <div class="option-desc">Cualquier número par (0,2,4,6,8)</div>
+                                    </button>
+                                    <button class="variable-option" data-type="odd">
+                                        <div class="option-icon">📙</div>
+                                        <div class="option-name">Impar</div>
+                                        <div class="option-desc">Cualquier número impar (1,3,5,7,9)</div>
+                                    </button>
+                                    <button class="variable-option" data-type="repeat">
+                                        <div class="option-icon">🔁</div>
+                                        <div class="option-name">Repetición</div>
+                                        <div class="option-desc">Cualquier dígito repetido N veces seguidas</div>
+                                    </button>
+                                    <button class="variable-option" data-type="hotdigit">
+                                        <div class="option-icon">🔥</div>
+                                        <div class="option-name">Dígito Caliente</div>
+                                        <div class="option-desc">El dígito que MÁS sale (predicción dinámica)</div>
+                                    </button>
+                                    <button class="variable-option" data-type="colddigit">
+                                        <div class="option-icon">🧊</div>
+                                        <div class="option-name">Dígito Frío</div>
+                                        <div class="option-desc">El dígito que MENOS sale (predicción dinámica)</div>
+                                    </button>
+                                    <button class="variable-option" data-type="hoteo">
+                                        <div class="option-icon">🔥±</div>
+                                        <div class="option-name">Par/Impar Caliente</div>
+                                        <div class="option-desc">El tipo (par o impar) que MÁS sale</div>
+                                    </button>
+                                    <button class="variable-option" data-type="coldeo">
+                                        <div class="option-icon">🧊±</div>
+                                        <div class="option-name">Par/Impar Frío</div>
+                                        <div class="option-desc">El tipo (par o impar) que MENOS sale</div>
+                                    </button>
+                                </div>
+                                <button id="modalCancelVariableBtn" class="btn btn-secondary btn-block">
+                                    ❌ Cancelar
+                                </button>
+                            </div>
+
+                            <!-- Selector de Número -->
+                            <div id="modalNumberSelector" class="number-selector" style="display: none;">
+                                <h4>Selecciona el número:</h4>
+                                <div class="number-grid">
+                                    <button class="number-btn" data-number="0">0</button>
+                                    <button class="number-btn" data-number="1">1</button>
+                                    <button class="number-btn" data-number="2">2</button>
+                                    <button class="number-btn" data-number="3">3</button>
+                                    <button class="number-btn" data-number="4">4</button>
+                                    <button class="number-btn" data-number="5">5</button>
+                                    <button class="number-btn" data-number="6">6</button>
+                                    <button class="number-btn" data-number="7">7</button>
+                                    <button class="number-btn" data-number="8">8</button>
+                                    <button class="number-btn" data-number="9">9</button>
+                                </div>
+                                <button id="modalCancelNumberBtn" class="btn btn-secondary btn-block">
+                                    ❌ Cancelar
+                                </button>
+                            </div>
+
+                            <!-- Selector de Repetición -->
+                            <div id="modalRepeatSelector" class="number-selector" style="display: none;">
+                                <h4>¿Cuántas veces seguidas debe repetirse el dígito?</h4>
+                                <div class="number-grid">
+                                    <button class="number-btn" onclick="addPatternVariable('repeat', '2'); document.getElementById('modalRepeatSelector').style.display='none';">2x</button>
+                                    <button class="number-btn" onclick="addPatternVariable('repeat', '3'); document.getElementById('modalRepeatSelector').style.display='none';">3x</button>
+                                    <button class="number-btn" onclick="addPatternVariable('repeat', '4'); document.getElementById('modalRepeatSelector').style.display='none';">4x</button>
+                                    <button class="number-btn" onclick="addPatternVariable('repeat', '5'); document.getElementById('modalRepeatSelector').style.display='none';">5x</button>
+                                    <button class="number-btn" onclick="addPatternVariable('repeat', '6'); document.getElementById('modalRepeatSelector').style.display='none';">6x</button>
+                                    <button class="number-btn" onclick="addPatternVariable('repeat', '7'); document.getElementById('modalRepeatSelector').style.display='none';">7x</button>
+                                    <button class="number-btn" onclick="addPatternVariable('repeat', '8'); document.getElementById('modalRepeatSelector').style.display='none';">8x</button>
+                                </div>
+                                <p style="color:#888; font-size:12px; margin:8px 0;">Ejemplo: 🔁3x significa que cualquier dígito (0-9) aparece 3 veces seguidas</p>
+                                <button class="btn btn-secondary btn-block" onclick="document.getElementById('modalRepeatSelector').style.display='none';">
+                                    ❌ Cancelar
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Botones de Acción -->
+                        <div class="modal-actions">
+                            <button id="saveContractBtn" class="btn btn-success btn-block">
+                                ✅ Guardar Contrato
+                            </button>
+                            <button id="cancelContractBtn" class="btn btn-secondary btn-block">
+                                ❌ Cancelar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel de Notificaciones Telegram -->
+        <div class="automation-section">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>📱 Notificaciones vía Telegram</h2>
+                    <span id="telegramStatus" style="font-size:13px; color:#888;">⚫ Desactivado</span>
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px; padding:10px 0;">
+                    <!-- Credenciales -->
+                    <div style="padding:18px; background:rgba(0,0,0,0.25); border-radius:10px; border:1px solid rgba(255,255,255,0.07);">
+                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; padding:10px 14px; background:rgba(255,255,255,0.04); border-radius:8px; border:1px solid rgba(255,255,255,0.08);">
+                            <span style="font-size:14px; font-weight:600; color:#fff;">📱 Notificaciones activas</span>
+                            <label class="tg-toggle">
+                                <input type="checkbox" id="telegramEnabled">
+                                <span class="tg-toggle-slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>🤖 Bot Token</label>
+                            <input type="password" id="telegramBotToken" class="input-styled" placeholder="1234567890:ABCdef...">
+                            <small style="color:#888;">Créalo con <a href="https://t.me/BotFather" target="_blank" style="color:#4caf50;">@BotFather</a> en Telegram</small>
+                        </div>
+
+                        <div class="form-group" style="margin-top:12px;">
+                            <label>💬 Chat ID</label>
+                            <input type="text" id="telegramChatId" class="input-styled" placeholder="123456789">
+                            <small style="color:#888;">Obtén el tuyo con <a href="https://t.me/userinfobot" target="_blank" style="color:#4caf50;">@userinfobot</a></small>
+                        </div>
+
+                        <div style="display:flex; gap:10px; margin-top:16px;">
+                            <button id="telegramTestBtn" class="btn btn-secondary" style="flex:1;">📤 Probar</button>
+                            <button id="telegramSaveBtn" class="btn btn-success" style="flex:1;">💾 Guardar</button>
+                        </div>
+                    </div>
+
+                    <!-- Info de qué envía -->
+                    <div style="padding:18px; background:rgba(0,0,0,0.25); border-radius:10px; border:1px solid rgba(255,255,255,0.07);">
+                        <h4 style="color:#fff; margin-bottom:14px;">📨 ¿Qué recibirás en cada trade?</h4>
+                        <div style="display:flex; flex-direction:column; gap:10px; font-size:13px; color:#ccc; line-height:1.6;">
+                            <div>✅❌ Resultado del trade (ganancia/pérdida)</div>
+                            <div>💰 Balance global acumulado</div>
+                            <div>🔢 Total de operaciones (ganadas / perdidas)</div>
+                            <div>📈 Máxima ganancia global</div>
+                            <div>📉 Máxima pérdida global</div>
+                            <div>📊 Promedio por operación</div>
+                            <div>🤖 Balance individual de cada bot activo</div>
+                        </div>
+                        <div style="margin-top:18px; padding:12px; background:rgba(52,152,219,0.1); border:1px solid rgba(52,152,219,0.25); border-radius:7px; font-size:12px; color:#7fb3d3; line-height:1.7;">
+                            <strong>📖 Cómo configurar:</strong><br>
+                            1. Abre Telegram → busca <strong>@BotFather</strong><br>
+                            2. Escribe <code>/newbot</code> y sigue los pasos<br>
+                            3. Pega el <strong>token</strong> aquí a la izquierda<br>
+                            4. Habla con tu bot (escríbele algo)<br>
+                            5. Obtén tu Chat ID con <strong>@userinfobot</strong><br>
+                            6. Guarda y presiona <strong>Probar</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+                <!-- Footer -->
+        <footer class="footer">
+            <p>⚠️ <strong>Advertencia:</strong> El trading de derivados conlleva riesgos. Opera solo con dinero que puedas permitirte perder.</p>
+            <p>Desarrollado con la API de Deriv • <a href="https://developers.deriv.com" target="_blank">Documentación</a></p>
+        </footer>
+    </div>
+
+    <!-- Modal de Resultado -->
+    <div id="resultModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="modalTitle">Resultado de la Operación</h2>
+            <div id="modalBody" class="modal-body"></div>
+            <button id="modalCloseBtn" class="btn btn-primary">Cerrar</button>
+        </div>
+    </div>
+
+    <!-- Contenedor de Notificaciones -->
+    <div id="notificationContainer" class="notification-container"></div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
